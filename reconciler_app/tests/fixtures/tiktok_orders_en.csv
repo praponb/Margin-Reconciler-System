@@ -1,0 +1,7 @@
+﻿Order ID,Order Status,Seller SKU,Quantity,SKU Unit Original Price,SKU Seller Discount,SKU Subtotal After Discount,Order Amount,Created Time
+Platform unique order ID.,Current order status.,Seller SKU,Quantity,Unit original price,Seller discount,Subtotal,Order amount,Order created time
+5701,Completed,TSHIRT-001,1,199,20,179,308,2026-11-03 19:45:00
+5701,Completed,TT-MUG,1,129,0,129,308,2026-11-03 19:45:00
+5702,Completed,TT-CABLE,2,0,0,0,0,2026-11-04 11:00:00
+5702,Completed,TT-MUG,1,0,0,0,0,2026-11-04 11:00:00
+5703,Cancelled,TT-MUG,1,129,0,129,129,2026-11-04 12:00:00
