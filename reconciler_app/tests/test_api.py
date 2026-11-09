@@ -72,7 +72,9 @@ def test_reupload_reports_duplicates(client):
     _upload(client, MARKETPLACE_FILES[:1])
     again = _upload(client, MARKETPLACE_FILES[:1]).json()
     assert again[0]["skipped_duplicate"] is True
-    assert len(client.get("/ingest/batches", params=Q).json()) == 1
+    batches = client.get("/ingest/batches", params=Q).json()
+    assert len(batches) == 1
+    assert batches[0]["ingested_at"].endswith("+07:00")
 
 
 def test_unknown_file_is_reported_per_file(client):

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from reconciler_app.api.deps import get_session
 from reconciler_app.api.schemas import BatchOut, IngestFileResult
+from reconciler_app.core.config import get_settings
 from reconciler_app.db import repositories as repo
 from reconciler_app.services.ingestion import ingest_file
 
@@ -29,4 +31,10 @@ async def ingest(
 
 @router.get("/ingest/batches", response_model=list[BatchOut])
 def batches(merchant_id: uuid.UUID = Query(...), limit: int = 50, session: Session = Depends(get_session)):
-    return repo.list_batches(session, merchant_id, limit)
+    tz = ZoneInfo(get_settings().local_timezone)
+    out = []
+    for b in repo.list_batches(session, merchant_id, limit):
+        row = BatchOut.model_validate(b)
+        row.ingested_at = repo.as_utc(b.ingested_at).astimezone(tz)  # SQLite returns naive UTC
+        out.append(row)
+    return out

@@ -57,6 +57,16 @@ st.divider()
 st.subheader("Recent uploads")
 batches = call(api().get, "/ingest/batches", merchant_id=merchant_id())
 if batches:
-    st.dataframe(rows_frame(batches), hide_index=True, width="stretch")
+    st.dataframe(
+        rows_frame(batches).select(
+            pl.col("ingested_at").str.slice(0, 19).str.replace("T", " ").alias("uploaded (BKK)"),
+            "filename",
+            "channel",
+            pl.col("report_type").str.replace("_", " · ").alias("report"),
+            pl.col("row_count").alias("rows"),
+        ),
+        hide_index=True,
+        width="stretch",
+    )
 else:
     st.caption("No files ingested yet.")
