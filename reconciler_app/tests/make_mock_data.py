@@ -3,6 +3,7 @@
     uv run python -m reconciler_app.tests.make_mock_data                 # 1000 orders -> mock_data/
     uv run python -m reconciler_app.tests.make_mock_data --orders 5000 --seed 7
     uv run python -m reconciler_app.tests.make_mock_data --load http://127.0.0.1:8000
+    uv run python -m reconciler_app.tests.make_mock_data --batch 2 --orders 200 --out ~/Downloads/batch2
 
 Output (same formats the importer expects; see make_fixtures.py):
   products_mock.csv, sku_mappings_mock.csv
@@ -112,11 +113,16 @@ def channel_sku(channel: str, internal_sku: str) -> str:
     return f"{prefix}-{internal_sku}"
 
 
-def make_orders(n: int, rng: random.Random) -> list[Order]:
+def make_orders(n: int, rng: random.Random, batch: int = 0) -> list[Order]:
     channels = list(CHANNELS)
     weights = [CHANNELS[c][4] for c in channels]
     popularity = [rng.uniform(0.3, 3.0) for _ in PRODUCTS]
-    counters = {"SHOPEE": 2611100001, "LAZADA": 4100001, "TIKTOK": 5800000000000001}
+    # Each batch gets its own ID range so new batches add orders instead of replacing them.
+    counters = {
+        "SHOPEE": 2611100001 + batch * 100_000,
+        "LAZADA": 4100001 + batch * 100_000,
+        "TIKTOK": 5800000000000001 + batch * 1_000_000_000,
+    }
     span = (END - START).total_seconds()
     orders = []
     for _ in range(n):
@@ -181,9 +187,9 @@ def be_date(dt: datetime, with_time: bool = True) -> str:
     return f"{s} {dt:%H:%M}" if with_time else s
 
 
-def write_master_data(out: Path) -> None:
+def write_master_data(out: Path, tag: str = "mock") -> None:
     write_csv(
-        out / "products_mock.csv",
+        out / f"products_{tag}.csv",
         [["SKU", "ชื่อสินค้า", "ต้นทุน", "ค่าบรรจุภัณฑ์"]] + [[s, n, c, p] for s, n, c, p, _ in PRODUCTS],
         "utf-8-sig",
     )
@@ -193,10 +199,10 @@ def write_master_data(out: Path) -> None:
             code = channel_sku(channel, sku)
             if code != sku:
                 rows.append([channel, code, sku])
-    write_csv(out / "sku_mappings_mock.csv", rows, "utf-8")
+    write_csv(out / f"sku_mappings_{tag}.csv", rows, "utf-8")
 
 
-def write_shopee(out: Path, orders: list[Order]) -> None:
+def write_shopee(out: Path, orders: list[Order], tag: str = "mock") -> None:
     rows = [
         ["รายงานคำสั่งซื้อ Shopee"],
         ["ร้านค้า: ตัวอย่างช็อป", f"ช่วงเวลา: {be_date(START, False)} - {be_date(END, False)}"],
@@ -260,11 +266,11 @@ def write_shopee(out: Path, orders: list[Order]) -> None:
                     f"{net:.2f}",
                 ]
             )
-    write_csv(out / "shopee_orders_mock.csv", rows, "utf-8-sig")
-    write_csv(out / "shopee_settlement_mock.csv", settle, "utf-8")
+    write_csv(out / f"shopee_orders_{tag}.csv", rows, "utf-8-sig")
+    write_csv(out / f"shopee_settlement_{tag}.csv", settle, "utf-8")
 
 
-def write_lazada(out: Path, orders: list[Order]) -> None:
+def write_lazada(out: Path, orders: list[Order], tag: str = "mock") -> None:
     rows = [
         [
             "Order Item Id",
@@ -282,7 +288,7 @@ def write_lazada(out: Path, orders: list[Order]) -> None:
         ["รายงานธุรกรรม Lazada"],
         ["วันที่ทำรายการ", "ชื่อค่าธรรมเนียม", "จำนวนเงิน", "หมายเลขคำสั่งซื้อ", "รหัสรายการสินค้า"],
     ]
-    item_id = 91000001
+    item_id = 91000001  # Lazada item IDs are informational; the importer drops them
     for o in orders:
         status = "canceled" if o.cancelled else ("delivered" if o.settled_on else "shipped")
         item_ids = []
@@ -316,11 +322,11 @@ def write_lazada(out: Path, orders: list[Order]) -> None:
                 settle.append([d, "ค่าจัดส่งที่ลูกค้าชำระ", f"{o.buyer_ship:.2f}", o.order_id, ""])
             if o.actual_ship:
                 settle.append([d, "ค่าจัดส่งที่ลาซาด้าเรียกเก็บ", f"-{o.actual_ship:.2f}", o.order_id, ""])
-    write_xlsx(out / "lazada_orders_mock.xlsx", rows)
-    write_csv(out / "lazada_settlement_mock.csv", settle, "cp874")
+    write_xlsx(out / f"lazada_orders_{tag}.xlsx", rows)
+    write_csv(out / f"lazada_settlement_{tag}.csv", settle, "cp874")
 
 
-def write_tiktok(out: Path, orders: list[Order]) -> None:
+def write_tiktok(out: Path, orders: list[Order], tag: str = "mock") -> None:
     header = [
         "Order ID",
         "Order Status",
@@ -379,30 +385,31 @@ def write_tiktok(out: Path, orders: list[Order]) -> None:
                     f"{net:.2f}",
                 ]
             )
-    write_csv(out / "tiktok_orders_mock.csv", rows, "utf-8-sig")
-    write_xlsx(out / "tiktok_settlement_mock.xlsx", settle)
+    write_csv(out / f"tiktok_orders_{tag}.csv", rows, "utf-8-sig")
+    write_xlsx(out / f"tiktok_settlement_{tag}.xlsx", settle)
 
 
-def generate(n: int, seed: int, out: Path = OUT_DIR) -> list[Order]:
+def generate(n: int, seed: int, out: Path = OUT_DIR, batch: int = 0) -> list[Order]:
+    tag = f"batch{batch}" if batch else "mock"
     rng = random.Random(seed)
-    orders = make_orders(n, rng)
+    orders = make_orders(n, rng, batch)
     out.mkdir(exist_ok=True)
-    write_master_data(out)
+    write_master_data(out, tag)
     by_channel = {c: [o for o in orders if o.channel == c] for c in CHANNELS}
-    write_shopee(out, by_channel["SHOPEE"])
-    write_lazada(out, by_channel["LAZADA"])
-    write_tiktok(out, by_channel["TIKTOK"])
+    write_shopee(out, by_channel["SHOPEE"], tag)
+    write_lazada(out, by_channel["LAZADA"], tag)
+    write_tiktok(out, by_channel["TIKTOK"], tag)
     return orders
 
 
-def load(api: str, out: Path = OUT_DIR, merchant_id: str = MERCHANT_ID) -> None:
+def load(api: str, out: Path = OUT_DIR, merchant_id: str = MERCHANT_ID, tag: str = "mock") -> None:
     import httpx
 
     q = {"merchant_id": merchant_id}
     with httpx.Client(base_url=api, timeout=300) as client:
         for path, name in (
-            ("/products/upload", "products_mock.csv"),
-            ("/sku-mappings/upload", "sku_mappings_mock.csv"),
+            ("/products/upload", f"products_{tag}.csv"),
+            ("/sku-mappings/upload", f"sku_mappings_{tag}.csv"),
         ):
             res = client.post(path, params=q, files={"file": (name, (out / name).read_bytes())})
             res.raise_for_status()
@@ -410,7 +417,7 @@ def load(api: str, out: Path = OUT_DIR, merchant_id: str = MERCHANT_ID) -> None:
         exports = sorted(
             p
             for p in out.iterdir()
-            if p.stem.endswith("_mock") and p.stem.split("_")[0] in ("shopee", "lazada", "tiktok")
+            if p.stem.endswith(f"_{tag}") and p.stem.split("_")[0] in ("shopee", "lazada", "tiktok")
         )
         res = client.post("/ingest", data=q, files=[("files", (p.name, p.read_bytes())) for p in exports])
         res.raise_for_status()
@@ -426,14 +433,18 @@ def main() -> None:
     ap.add_argument("--orders", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument(
+        "--batch", type=int, default=0, help="batch number >= 1 gives new order IDs and *_batchN files"
+    )
+    ap.add_argument("--out", type=Path, default=OUT_DIR, help="output folder (default: mock_data/)")
+    ap.add_argument(
         "--load", metavar="API_URL", help="upload the generated files to a running API and reconcile"
     )
     args = ap.parse_args()
-    orders = generate(args.orders, args.seed)
+    orders = generate(args.orders, args.seed, args.out, args.batch)
     lines = sum(len(o.lines) for o in orders)
-    print(f"Generated {len(orders)} orders / {lines} lines in {OUT_DIR}")
+    print(f"Generated {len(orders)} orders / {lines} lines in {args.out}")
     if args.load:
-        load(args.load)
+        load(args.load, args.out, tag=f"batch{args.batch}" if args.batch else "mock")
 
 
 if __name__ == "__main__":
