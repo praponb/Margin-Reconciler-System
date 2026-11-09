@@ -1,7 +1,7 @@
 import polars as pl
 import streamlit as st
 
-from reconciler_app.ui_common import CHANNELS, api, call, merchant_id
+from reconciler_app.ui_common import CHANNELS, api, call, merchant_id, rows_frame
 
 st.title("Products & SKU mapping")
 
@@ -13,7 +13,7 @@ with tab_products:
     )
     products = call(api().get, "/products", merchant_id=merchant_id()) or []
     base = (
-        pl.DataFrame(products).select(
+        rows_frame(products).select(
             "internal_sku",
             "product_name",
             pl.col("cogs_amount").cast(pl.Float64),
@@ -71,7 +71,7 @@ with tab_mappings:
     )
     mappings = call(api().get, "/sku-mappings", merchant_id=merchant_id()) or []
     if mappings:
-        st.dataframe(pl.DataFrame(mappings).drop("mapping_id"), hide_index=True, width="stretch")
+        st.dataframe(rows_frame(mappings).drop("mapping_id"), hide_index=True, width="stretch")
     up = st.file_uploader(
         "Bulk upload (columns: Channel, Channel SKU, Internal SKU)",
         type=["csv", "xlsx"],
@@ -95,7 +95,7 @@ with tab_unmapped:
         st.success("Every reconciled order line is mapped.")
     else:
         unmapped = (
-            pl.DataFrame(rows)
+            rows_frame(rows)
             .group_by("channel", "internal_sku")
             .agg(pl.len().alias("lines"), pl.col("gross_revenue").sum().alias("revenue"))
             .rename({"internal_sku": "channel_sku"})

@@ -1,7 +1,7 @@
 import polars as pl
 import streamlit as st
 
-from reconciler_app.ui_common import api, call, merchant_id, status_label
+from reconciler_app.ui_common import api, call, merchant_id, rows_frame, status_label
 
 st.title("Upload & reconcile")
 st.caption(
@@ -24,7 +24,7 @@ if st.button("Ingest files", type="primary", disabled=not files):
             else:
                 st.error(f"**{r['filename']}**: {r['message']}")
         st.dataframe(
-            pl.DataFrame(results).select(
+            rows_frame(results).select(
                 "filename",
                 "status",
                 "report_type",
@@ -57,6 +57,6 @@ st.divider()
 st.subheader("Recent uploads")
 batches = call(api().get, "/ingest/batches", merchant_id=merchant_id())
 if batches:
-    st.dataframe(pl.DataFrame(batches), hide_index=True, width="stretch")
+    st.dataframe(rows_frame(batches), hide_index=True, width="stretch")
 else:
     st.caption("No files ingested yet.")

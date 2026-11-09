@@ -52,7 +52,12 @@ def baht(value: float) -> str:
 
 
 def rows_frame(rows: list[dict]) -> pl.DataFrame:
-    return pl.DataFrame(rows) if rows else pl.DataFrame()
+    """API rows -> DataFrame, inferring types from *all* rows.
+
+    Polars infers from the first 100 rows by default; a column that is empty there
+    (e.g. settlement_date on pending payouts) would otherwise fail on a later value.
+    """
+    return pl.DataFrame(rows, infer_schema_length=None) if rows else pl.DataFrame()
 
 
 def filter_bar(key: str, *, with_status: bool = False) -> dict:

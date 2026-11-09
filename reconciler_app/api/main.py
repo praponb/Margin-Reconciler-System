@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy import Engine, text
 
-from reconciler_app.api.routes import ingest, margins, pricing, products, reconcile
+from reconciler_app.api.routes import ingest, margins, pipeline, pricing, products, reconcile
 from reconciler_app.core.config import Settings, get_settings
 from reconciler_app.db.connection import make_engine, make_session_factory, run_migrations
 
@@ -41,7 +41,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             conn.execute(text("SELECT 1"))
         return {"status": "ok", "database": engine.dialect.name}
 
-    for module in (ingest, products, reconcile, margins, pricing):
+    for module in (ingest, products, reconcile, margins, pricing, pipeline):
         app.include_router(module.router)
     return app
 

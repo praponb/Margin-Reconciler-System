@@ -24,6 +24,8 @@ To try it with the synthetic sample data:
 
 API docs are at http://127.0.0.1:8000/docs.
 
+For a bigger dataset, `uv run python -m reconciler_app.tests.make_mock_data --load http://127.0.0.1:8000` generates 1,000 mock orders into `mock_data/` (git-ignored) and loads them. Use `--orders N --seed S` for other sizes.
+
 ### PostgreSQL
 
 ```bash
@@ -37,7 +39,7 @@ Settings come from environment variables or `.env`; see `.env.example`.
 ## Tests
 
 ```bash
-uv run pytest                    # 79 tests, in-memory SQLite
+uv run pytest                    # 92 tests, in-memory SQLite (includes rendering every UI page)
 uv run ruff check .
 TEST_DATABASE_URL=postgresql+psycopg://reconciler:reconciler@localhost:5432/reconciler uv run pytest
 uv run python -m reconciler_app.tests.make_fixtures      # regenerate the synthetic exports
@@ -58,7 +60,7 @@ upload ─▶ SHA-256 check ─▶ sniffer ─▶ canonical mapping ─▶ parse
 | `core/parser.py`, `core/normalize.py` | Cleans data (`฿1,234.50`, `(12.00)`, `-`, Buddhist-Era dates, day-first formats). Sums Lazada's one-row-per-unit order rows and pivots its fee lines into one row per order. Drops columns it doesn't recognise. |
 | `core/engine.py` | Splits fees across lines by value weight, audits shipping gaps, and computes profit, margin and status. |
 | `core/pricing.py` | Reverse pricing (spec §4.4), plus a cost breakdown. |
-| `services/` | Idempotent ingestion; rebuilds the margin data for a date range. |
+| `services/` | Idempotent ingestion; rebuilds the margin data for a date range; builds the pipeline status (`services/pipeline.py`). Every upload attempt and reconcile is logged in `pipeline_runs`. |
 | `api/` | FastAPI routes. |
 | `app.py`, `views/` | Streamlit UI. |
 
@@ -79,6 +81,7 @@ upload ─▶ SHA-256 check ─▶ sniffer ─▶ canonical mapping ─▶ parse
 | GET | `/margins`, `/margins/summary`, `/exceptions` | Line detail, P&L by SKU and channel, exception queue (worst profit first) |
 | GET | `/margins/export.csv` | CSV export in UTF-8 with BOM, so it opens correctly in Excel |
 | POST | `/pricing/recommend` | Recommended price and breakdown |
+| GET | `/pipeline/status` | Stage-by-stage counts, payout and SKU coverage, freshness, run history |
 
 ## Conventions
 
@@ -107,6 +110,7 @@ upload ─▶ SHA-256 check ─▶ sniffer ─▶ canonical mapping ─▶ parse
 | `internal_sku NOT NULL` in the mart | Unmapped lines keep the channel SKU with status `UNMAPPED_SKU` | Unmapped lines surface in the exception queue instead of disappearing |
 | Float allocation | Rounded to 4 dp, with the rounding remainder added to the highest-weight line | Each order's allocated fees sum exactly to its fee |
 | — | `ingestion_batches` table (SHA-256), plus a `uq_settlement_slice` unique key | Idempotent re-ingestion |
+| — | `pipeline_runs` table (migration `0002`) | Run history, failures and freshness for the Data pipeline page |
 | Mart "partitioned by merchant + date" | Indexes only | A Postgres partition key must be part of the PK. Partitioning later means changing the PK to `(reconcile_id, merchant_id, order_date)` |
 | DuckDB | Not used | Polars covers every computation |
 
