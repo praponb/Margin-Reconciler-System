@@ -47,6 +47,7 @@ nav = st.navigation(
         st.Page("views/3_margins.py", title="Margins", icon="📈"),
         st.Page("views/4_exceptions.py", title="Exceptions queue", icon="🚩"),
         st.Page("views/5_pricing.py", title="Pricing simulator", icon="🧮"),
+        st.Page("views/6_pipeline.py", title="Data pipeline", icon="🔄"),
     ]
 )
 nav.run()

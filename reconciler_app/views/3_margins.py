@@ -11,6 +11,7 @@ from reconciler_app.ui_common import (
     baht,
     call,
     filter_bar,
+    rows_frame,
     status_label,
 )
 
@@ -22,7 +23,7 @@ if not summary:
     st.info("No reconciled data yet. Upload exports and run reconciliation first.")
     st.stop()
 
-s = pl.DataFrame(summary)
+s = rows_frame(summary)
 revenue = s["gross_revenue"].sum()
 profit = s["net_profit"].sum()
 fees = s["total_fees"].sum()
@@ -37,7 +38,7 @@ k[4].metric("Shipping overcharge", baht(gap))
 
 # Status tiles (icon + label + count; colour never carries meaning alone)
 lines = call(api().get, "/margins", **params, limit=5000) or {"rows": []}
-detail = pl.DataFrame(lines["rows"]) if lines["rows"] else pl.DataFrame()
+detail = rows_frame(lines["rows"])
 if detail.height:
     counts = dict(detail.group_by("reconcile_status").len().iter_rows())
     cols = st.columns(len(STATUS_META))

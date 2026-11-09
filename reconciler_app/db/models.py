@@ -12,6 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     Date,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
     func,
@@ -179,3 +181,27 @@ class IngestionBatch(Base):
     report_type: Mapped[str] = mapped_column(String(50), nullable=False)
     row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     ingested_at: Mapped[datetime] = mapped_column(TZ_TIMESTAMP, server_default=func.current_timestamp())
+
+
+class PipelineRun(Base):
+    """Addition to spec: one row per pipeline run (file ingest attempt or reconcile).
+
+    Unlike ingestion_batches, this also records duplicate skips and failures, so the
+    Data pipeline page can show history, durations and errors.
+    """
+
+    __tablename__ = "pipeline_runs"
+    __table_args__ = (Index("idx_pipeline_runs_merchant", "merchant_id", "started_at"),)
+
+    run_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    merchant_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    stage: Mapped[str] = mapped_column(String(20), nullable=False)  # INGEST | RECONCILE
+    status: Mapped[str] = mapped_column(String(30), nullable=False)  # ok | skipped_duplicate | error
+    started_at: Mapped[datetime] = mapped_column(TZ_TIMESTAMP, nullable=False)
+    finished_at: Mapped[datetime] = mapped_column(TZ_TIMESTAMP, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    report_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)

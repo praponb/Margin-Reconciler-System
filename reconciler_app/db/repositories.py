@@ -29,6 +29,7 @@ from reconciler_app.db.models import (
     FactSettlement,
     FactSkuMargin,
     IngestionBatch,
+    PipelineRun,
 )
 
 CHUNK = 500
@@ -403,3 +404,27 @@ def replace_margins(
     for chunk in _chunks(rows):
         session.execute(FactSkuMargin.__table__.insert(), list(chunk))
     return len(rows)
+
+
+# --- pipeline run log ------------------------------------------------------------------------
+
+
+def record_run(session: Session, **fields) -> PipelineRun:
+    """Add a pipeline run row; the caller commits."""
+    for key in ("started_at", "finished_at"):
+        fields[key] = to_db_ts(fields[key])
+    run = PipelineRun(**fields)
+    session.add(run)
+    session.flush()
+    return run
+
+
+def list_runs(session: Session, merchant_id: uuid.UUID, limit: int = 50) -> list[PipelineRun]:
+    return list(
+        session.scalars(
+            select(PipelineRun)
+            .where(PipelineRun.merchant_id == merchant_id)
+            .order_by(PipelineRun.started_at.desc())
+            .limit(limit)
+        )
+    )

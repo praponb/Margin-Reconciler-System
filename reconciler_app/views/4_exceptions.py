@@ -1,7 +1,7 @@
 import polars as pl
 import streamlit as st
 
-from reconciler_app.ui_common import api, call, filter_bar, merchant_id, status_label
+from reconciler_app.ui_common import api, call, filter_bar, merchant_id, rows_frame, status_label
 
 st.title("Exceptions queue")
 st.caption("Order lines that need attention, worst profit first. Times are shown in Bangkok time.")
@@ -17,7 +17,7 @@ if not res["rows"]:
     st.stop()
 
 st.caption(f"{res['total']} exception lines")
-df = pl.DataFrame(res["rows"]).with_columns(
+df = rows_frame(res["rows"]).with_columns(
     pl.col("reconcile_status").map_elements(status_label, return_dtype=pl.Utf8).alias("status"),
     pl.col("order_date").str.slice(0, 16).str.replace("T", " ").alias("order_date (BKK)"),
 )

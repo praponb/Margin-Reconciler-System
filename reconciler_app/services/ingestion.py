@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -36,12 +38,41 @@ class IngestResult:
         return {**asdict(self), "skipped_duplicate": self.skipped_duplicate}
 
 
+def _log_run(
+    session: Session, merchant_id: uuid.UUID, result: IngestResult, started: datetime, t0: float
+) -> None:
+    repo.record_run(
+        session,
+        merchant_id=merchant_id,
+        stage="INGEST",
+        status="ok" if result.status == "ingested" else result.status,
+        started_at=started,
+        finished_at=datetime.now(UTC),
+        duration_ms=int((time.perf_counter() - t0) * 1000),
+        filename=result.filename[:255],
+        report_type=result.report_type,
+        rows=result.rows,
+        message=result.message,
+        details={
+            "channel": result.channel,
+            "encoding": result.encoding,
+            "header_row": result.header_row,
+            "skipped_rows": result.skipped_rows,
+            "dropped_columns": result.dropped_columns,
+        },
+    )
+
+
 def ingest_file(session: Session, merchant_id: uuid.UUID, filename: str, data: bytes) -> IngestResult:
-    """Ingest one export. Commits on success and rolls back on any error."""
+    """Ingest one export. Commits on success and rolls back on any error.
+
+    Every attempt (ingested, duplicate or failed) is logged in pipeline_runs.
+    """
+    started, t0 = datetime.now(UTC), time.perf_counter()
     digest = hashlib.sha256(data).hexdigest()
     existing = repo.find_batch(session, merchant_id, digest)
     if existing is not None:
-        return IngestResult(
+        result = IngestResult(
             filename=filename,
             status="skipped_duplicate",
             report_type=existing.report_type,
@@ -50,6 +81,9 @@ def ingest_file(session: Session, merchant_id: uuid.UUID, filename: str, data: b
             batch_id=str(existing.batch_id),
             message="Identical file was already ingested; nothing changed.",
         )
+        _log_run(session, merchant_id, result, started, t0)
+        session.commit()
+        return result
 
     result = IngestResult(filename=filename, status="error")
     try:
@@ -75,10 +109,15 @@ def ingest_file(session: Session, merchant_id: uuid.UUID, filename: str, data: b
             report_type=batch.report_type,
             row_count=result.rows,
         )
-        session.commit()
         result.status = "ingested"
         result.batch_id = str(record.batch_id)
+        _log_run(session, merchant_id, result, started, t0)
+        session.commit()
     except Exception as exc:  # report per-file errors; never leave a half-written batch
         session.rollback()
+        result.status = "error"
+        result.batch_id = None
         result.message = str(exc)
+        _log_run(session, merchant_id, result, started, t0)
+        session.commit()
     return result
